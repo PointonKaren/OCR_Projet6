@@ -8,7 +8,7 @@ module.exports = (req, res, next) => {
     const token = req.headers.authorization.split(" ")[1];
     // Récupère le header.authorization et le sépare par l'espace (" ") ce qui donne un tableau qui contient en index 0 "Bearer" et en index 1 le token.
     // C'est ce token en index 1 qui est de fait stocké dans la variable token.
-    const decodedToken = jwt.verify(token, "YHmWzGq4MBVwjUEZx5NxSIfPaORjhaPq"); // Vérifie/décode le token avec la clé d'encodage (cf user.js de controllers)
+    const decodedToken = jwt.verify(token, process.env.SECRET_KEY); // Vérifie/décode le token avec la clé d'encodage (cf user.js de controllers)
     req.auth = { userId: decodedToken.userId }; // Ajoute à la requête un objet "auth" qui contient le userId stocké dans le token.
 
     if (req.body.userId && req.body.userId !== decodedToken.userId) {
