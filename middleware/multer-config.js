@@ -1,29 +1,39 @@
 const multer = require("multer");
-
-// multer est un package de gestion de fichiers
+const path = require("path");
 
 const MIME_TYPES = {
   "image/jpg": "jpg",
   "image/jpeg": "jpg",
   "image/png": "png",
-}; // Dictionnaire des extensions
+}; // Dictionnaire des extensions acceptées
 
+/**
+ * Configuration du chemin et du nom à appliquer au fichier entrant
+ */
 const storage = multer.diskStorage({
-  // diskStorage configure le chemin et le nom de fichier pour les fichiers entrants.
   destination: (req, file, callback) => {
     callback(null, "images");
-  }, // Dit à Multer d'enregistrer les fichiers dans le dossier images
+  },
   filename: (req, file, callback) => {
     const name = file.originalname.replace(" ", "_");
-    // Donne au fichier un nouveau nom composé de son nom d'origine dont on a remplacé les espaces par des _
-
     const extension = MIME_TYPES[file.mimetype];
-    // utilise le dico pour dire "si un fichier est reconnu comme étant un jpg, l'extension est jpg"
-
     callback(null, `${name}_${Date.now()}.${extension}`);
-    // Génère un nom de fichier composé ainsi : name_timestamp.extension
   },
 });
 
-module.exports = multer({ storage }).single("image");
-// Exporte le middleware qui possède la stratégie de stockage définie auparavant et qui ne sera utilisable que pour des fichiers de type "image"
+/**
+ * Ajout du fichier entrant à la BDD
+ */
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, callback) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg") {
+      // Quelle que soit la casse, seules les extensions png, jpg et jpeg seront acceptées.
+      return callback(null, false);
+    }
+    callback(null, true);
+  },
+});
+
+module.exports = upload.single("image");

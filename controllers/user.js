@@ -1,60 +1,103 @@
 const User = require("../models/user");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const validator = require("email-validator"); // Permet de vérifier que la syntaxe d'écriture du mail est correcte (comme avec des regex)
+const emailValidator = require("email-validator");
+const passwordValidator = require("password-validator");
 
+/**
+ * S'enregistrer sur le site
+ * @param {*} req
+ * @param {*} res
+ * @param {*} next
+ * @returns
+ */
 exports.signup = (req, res, next) => {
-  if (validator.validate(req.body.email)) {
+  const passwordSchema = new passwordValidator();
+
+  passwordSchema
+    .is()
+    .min(8, "Le mot de passe doit contenir minimum 8 caractères.")
+    .is()
+    .max(100, "Le mot de passe doit contenir maximum 100 caractères.")
+    .has()
+    .uppercase(1, "Le mot de passe doit contenir au moins 1 majuscule.")
+    .has()
+    .lowercase(1, "Le mot de passe doit contenir au moins 1 minuscule.")
+    .has()
+    .digits(2, "Le mot de passe doit contenir au moins 2 chiffres.")
+    .has()
+    .not()
+    .spaces();
+
+  if (!passwordSchema.validate(req.body.password)) {
+    // Si le password créé ne rentre pas dans les conditions
+    let errorMessage = "";
+    const errors = passwordSchema.validate(req.body.password, {
+      details: true,
+    });
+    for (let i in errors) {
+      errorMessage += errors[i].message + " ";
+    }
+    return res.status(400).json({
+      message: errorMessage,
+    });
+  }
+
+  if (emailValidator.validate(req.body.email)) {
+    // Si la syntaxe du mail utilisé est correcte
     bcrypt
-      .hash(req.body.password, 10) // Permet de crypter un mdp écrit par l'utilisateur avec la méthode hash sur 10 cycles d'encryptage. Fonction asynchrone donc renvoie une promise
+      .hash(req.body.password, 10)
       .then((hashedPassword) => {
-        // .then permet de résoudre la promise renvoyée par la méthode hash ci-dessus quand ça fonctionne
         const user = new User({
-          // Création d'une instance de User contenant le mail entré par l'utilisateur et le mdp crypté avec la méthode hash
           email: req.body.email,
           password: hashedPassword,
         });
         user
-          .save() // Intègre dans la BDD les infos contenues dans la variable user. Cette intégration renvoie une promise qui doit être résolue par .then et .catch
-          .then(
-            () => res.status(201).json({ message: "Utilisateur créé." }) // Si l'intégration s'est bien passée, renvoyer un message "Utilisateur créé."
-          )
-          .catch((error) => res.status(400).json({ error })); // Si l'intégration se passe mal, la promise renvoie une erreur. La réponse prend un statut 400 et communique l'erreur survenue
+          .save()
+          .then(() => res.status(201).json({ message: "Utilisateur créé." }))
+          .catch((error) => res.status(400).json({ message: error }));
       })
-      .catch((error) => res.status(500).json({ error })); // Si le hash n'a pas fonctionné, la réponse prend un statut 500 qui signifie erreur serveur. Elle communique aussi au front l'erreur associée.
+      .catch((error) => res.status(500).json({ message: error }));
   } else {
-    return res.status(400).json({ error: "Syntaxe de mail incorrecte." });
+    return res.status(400).json({ message: "Syntaxe de mail incorrecte." });
   }
 };
 
+/**
+ * Se log sur le site
+ * @param {*} req
+ * @param {*} res
+ * @param {*} next
+ */
 exports.login = (req, res, next) => {
-  User.findOne({ email: req.body.email }) // Permet de voir si l'email entré par l'utilisateur existe dans la BDD en renvoyant une promise.
+  User.findOne({ email: req.body.email }) // Est-ce que l'utilisateur existe ?
     .then((user) => {
       if (!user) {
-        return res.status(404).json({ error: "Utilisateur non trouvé." });
-        // Si findOne n'a pas permis de trouver un email dans la BDD, renvoyer au front le statut 404 (ressource non trouvée) et mesasge d'erreur associé et sort de ce controller
+        return res
+          .status(404)
+          .json({ error: "Mail et/ou mot de passe incorrect." });
       }
       bcrypt
         .compare(req.body.password, user.password)
-        // Si user trouvé, utilisation de la méthode compare de bcrypt pour comparer le mdp entré par l'utilisateur et celui stocké dans la bdd.
         .then((samePassword) => {
           if (!samePassword) {
-            return res.status(401).json({ error: "Mot de passe incorrect." });
-            // Si le mdp n'est pas identique, renvoyer au front statut 401 (non authentifié) et message d'erreur associé.
+            return res
+              .status(401)
+              .json({ error: "Mail et/ou mot de passe incorrect." });
           }
           res.status(200).json({
-            userId: user._id, // associe l'id de la bdd au userId du front
+            userId: user._id,
             token: jwt.sign(
-              // génère un token encodé à partir de l'user du findOne et d'une clé d'encodage aléatoirement générée.
+              // Génération d'un token user, valable 24h
               { userId: user._id },
-              process.env.SECRET_KEY, // clé d'encodage qui sera utilisée pour chaque encodage, unique au site, générée aléatoirement
+              process.env.SECRET_KEY, // clé d'encodage unique pour le site, qui sera utilisée pour chaque encodage et qui a été générée aléatoirement en amont
               {
-                expiresIn: "24h", // Durée avant expiration du token et donc de la connexion (une fois expiré, nouvelle connexion obligatoire)
+                expiresIn: "24h",
               }
             ),
           });
         })
-        .catch((error) => res.status(500).json({ error })); // Si la comparaison n'a pas fonctionné, renvoyer au front statut 500 et l'erreur associée
-    }) // L'utilisateur existe
-    .catch((error) => res.status(500).json({ error })); // Si le findOne n'a pas fonctionné, renvoyer au front statut 500 et l'erreur associée
+        .catch((error) => res.status(500).json({ error }));
+    })
+    .catch((error) => res.status(500).json({ error }));
 };
