@@ -2,6 +2,38 @@ const Sauce = require("../models/sauce");
 const fileSystem = require("fs");
 
 /**
+ * Fonction générique utilisée pour gérer les likes/dislikes
+ * @param {*} req
+ * @param {*} res
+ * @param {String} how
+ * @param {String} rateType
+ */
+const updateOneSauce = (req, res, how, rateType) => {
+  const str1 = `${rateType}s`;
+  const str2 = `users${rateType.charAt(0).toUpperCase() + rateType.slice(1)}d`;
+  const str3 = `${rateType.charAt(0).toUpperCase() + rateType.slice(1)} ${
+    how == "push" ? "ajouté" : "retiré"
+  }.`;
+
+  let modObject = {};
+
+  modObject["$inc"] = {};
+  modObject["$inc"][str1] = how == "push" ? 1 : -1;
+  modObject[`$${how}`] = {};
+  modObject[`$${how}`][str2] = req.body.userId;
+  modObject["_id"] = req.params.id;
+  console.log(modObject);
+  Sauce.updateOne({ _id: req.params.id }, modObject)
+    .then(() => {
+      res.status(200).json({ message: str3 });
+    })
+
+    .catch((error) => {
+      res.status(400).json({ error });
+    });
+};
+
+/**
  * Récupérer toutes les sauces
  * @param {*} req
  * @param {*} res
@@ -168,77 +200,23 @@ exports.rateSauce = (req, res, next) => {
       // Retirer son like/dislike
       if (req.body.like == 0) {
         if (userHasLiked) {
-          Sauce.updateOne(
-            { _id: req.params.id },
-            {
-              $inc: { likes: -1 },
-              $pull: { usersLiked: req.body.userId },
-              _id: req.params.id,
-            }
-          )
-            .then(() => {
-              res.status(200).json({ message: "Like retiré." });
-            })
-
-            .catch((error) => {
-              res.status(400).json({ error });
-            });
+          updateOneSauce(req, res, "pull", "like");
         } else if (userHasDisliked) {
-          Sauce.updateOne(
-            { _id: req.params.id },
-            {
-              $inc: { dislikes: -1 },
-              $pull: { usersDisliked: req.body.userId },
-              _id: req.params.id,
-            }
-          )
-
-            .then(() => {
-              res.status(200).json({ message: "Dislike retiré." });
-            })
-            .catch((error) => {
-              res.status(400).json({ error });
-            });
+          updateOneSauce(req, res, "pull", "dislike");
         } else {
           return res.status(403).json({ error: "Requête non autorisée." });
         }
       } else if (req.body.like == 1) {
         // Like une sauce
         if (userHasLiked == false && userHasDisliked == false) {
-          Sauce.updateOne(
-            { _id: req.params.id },
-            {
-              $inc: { likes: 1 },
-              $push: { usersLiked: req.body.userId },
-              _id: req.params.id,
-            }
-          )
-            .then(() => {
-              res.status(200).json({ message: "Sauce likée." });
-            })
-            .catch((error) => {
-              res.status(400).json({ error });
-            });
+          updateOneSauce(req, res, "push", "like");
         } else {
           return res.status(403).json({ error: "Requête non autorisée." });
         }
       } else if (req.body.like == -1) {
         // Dislike une sauce
         if (userHasDisliked == false && userHasLiked == false) {
-          Sauce.updateOne(
-            { _id: req.params.id },
-            {
-              $inc: { dislikes: 1 },
-              $push: { usersDisliked: req.body.userId },
-              _id: req.params.id,
-            }
-          )
-            .then(() => {
-              res.status(200).json({ message: "Sauce dislikée." });
-            })
-            .catch((error) => {
-              res.status(400).json({ error });
-            });
+          updateOneSauce(req, res, "push", "dislike");
         } else {
           return res.status(403).json({ error: "Requête non autorisée." });
         }
